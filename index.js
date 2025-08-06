@@ -7,29 +7,39 @@ app.get('/profile/:userid', async (req, res) => {
   const userId = req.params.userid;
 
   try {
-    // Récupère amis
+    // Friends
     const friendsRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends`);
     const friendsData = await friendsRes.json();
 
-    // Récupère followers
+    // Followers
     const followersRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`);
     const followersData = await followersRes.json();
 
-    // Récupère following
+    // Following
     const followingRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/followings/count`);
     const followingData = await followingRes.json();
 
-    // Récupère description (profile info)
+    // Description
     const descRes = await fetch(`https://users.roblox.com/v1/users/${userId}`);
     const descData = await descRes.json();
     const description = descData.description || "";
+
+    // ITEMS PORTÉS
+    const avatarRes = await fetch(`https://avatar.roblox.com/v1/users/${userId}/avatar`);
+    const avatarData = await avatarRes.json();
+    const assetsWorn = (avatarData.assets || []).map(asset => ({
+      id: asset.id,
+      name: asset.name,
+      assetType: asset.assetType
+    }));
 
     res.json({
       userId: Number(userId),
       friends: friendsData.data || [],
       followers: followersData.count || 0,
       following: followingData.count || 0,
-      description: description
+      description: description,
+      assetsWorn: assetsWorn
     });
 
   } catch (err) {
