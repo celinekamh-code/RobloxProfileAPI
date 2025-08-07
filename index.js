@@ -1,6 +1,5 @@
 const express = require('express');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const cheerio = require('cheerio');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -34,29 +33,13 @@ app.get('/profile/:userid', async (req, res) => {
       assetType: asset.assetType
     }));
 
-    // ===== VÉRIFIE LE BADGE DE VÉRIFICATION =====
-    let verified = false;
-    try {
-      const profilePageRes = await fetch(`https://www.roblox.com/users/${userId}/profile`);
-      const profileHtml = await profilePageRes.text();
-      const $ = cheerio.load(profileHtml);
-      // Cherche l’icône de vérification sur le nom du joueur
-      if ($('span.icon-verified-badge').length > 0) {
-        verified = true;
-      }
-    } catch (err) {
-      // Si échec, tu ignores (pas critique)
-      verified = false;
-    }
-
     res.json({
       userId: Number(userId),
       friends: friendsData.data || [],
       followers: followersData.count || 0,
       following: followingData.count || 0,
       description: description,
-      assetsWorn: assetsWorn,
-      verified: verified
+      assetsWorn: assetsWorn
     });
 
   } catch (err) {
@@ -68,4 +51,5 @@ app.get('/profile/:userid', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur profil Roblox lancé sur port ${PORT}`);
 });
+
 
