@@ -40,7 +40,7 @@ app.get('/profile/:userid', async (req, res) => {
       id: g.group.id,
       name: g.group.name,
       description: g.group.description,
-      emblemUrl: g.group.emblemUrl,
+      emblemUrl: g.group.emblemUrl || "", // Si pas d'emblème
       role: g.role.name
     }));
 
