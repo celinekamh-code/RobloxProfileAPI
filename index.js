@@ -33,13 +33,25 @@ app.get('/profile/:userid', async (req, res) => {
       assetType: asset.assetType
     }));
 
+    // GROUPES
+    const groupsRes = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const groupsData = await groupsRes.json();
+    const groups = (groupsData.data || []).map(g => ({
+      id: g.group.id,
+      name: g.group.name,
+      description: g.group.description,
+      emblemUrl: g.group.emblemUrl,
+      role: g.role.name
+    }));
+
     res.json({
       userId: Number(userId),
       friends: friendsData.data || [],
       followers: followersData.count || 0,
       following: followingData.count || 0,
       description: description,
-      assetsWorn: assetsWorn
+      assetsWorn: assetsWorn,
+      groups: groups
     });
 
   } catch (err) {
@@ -51,5 +63,4 @@ app.get('/profile/:userid', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur profil Roblox lancé sur port ${PORT}`);
 });
-
 
