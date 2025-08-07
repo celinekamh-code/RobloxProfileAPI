@@ -1,6 +1,6 @@
 const express = require('express');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const cheerio = require('cheerio'); // AJOUT POUR PARSER LE HTML
+const cheerio = require('cheerio');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -34,22 +34,20 @@ app.get('/profile/:userid', async (req, res) => {
       assetType: asset.assetType
     }));
 
-    // ----- AJOUT: Vérification si le compte est vérifié -----
-    let isVerified = false;
+    // ===== VÉRIFIE LE BADGE DE VÉRIFICATION =====
+    let verified = false;
     try {
-      const profileHtmlRes = await fetch(`https://www.roblox.com/users/${userId}/profile`);
-      const html = await profileHtmlRes.text();
-      const $ = cheerio.load(html);
-
-      // Cherche la présence de la classe du badge "verified"
-      isVerified =
-        $("span.icon-verified-roblox-badge").length > 0 ||
-        $("span.verified-badge-icon").length > 0;
+      const profilePageRes = await fetch(`https://www.roblox.com/users/${userId}/profile`);
+      const profileHtml = await profilePageRes.text();
+      const $ = cheerio.load(profileHtml);
+      // Cherche l’icône de vérification sur le nom du joueur
+      if ($('span.icon-verified-badge').length > 0) {
+        verified = true;
+      }
     } catch (err) {
-      // Si ça plante, on ignore, ça reste false
-      console.error("Erreur lors de la vérification du badge vérifié:", err);
+      // Si échec, tu ignores (pas critique)
+      verified = false;
     }
-    // --------------------------------------------------------
 
     res.json({
       userId: Number(userId),
@@ -58,7 +56,7 @@ app.get('/profile/:userid', async (req, res) => {
       following: followingData.count || 0,
       description: description,
       assetsWorn: assetsWorn,
-      isVerified // AJOUTE LE FLAG DANS LA REPONSE
+      verified: verified
     });
 
   } catch (err) {
