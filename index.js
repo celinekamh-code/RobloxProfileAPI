@@ -1,64 +1,67 @@
 const express = require('express');
-const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const app = express();
 const PORT = process.env.PORT || 8080;
-
-// petite util pour fetch JSON en sécurité
-async function getJSON(url) {
-  const r = await fetch(url, { headers: { 'User-Agent': 'robloxprofileapi/1.0' } });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
-  return r.json();
-}
 
 app.get('/profile/:userid', async (req, res) => {
   const userId = req.params.userid;
 
   try {
-    // --- Friends / Followers / Following
-    const [friendsData, followersData, followingData] = await Promise.all([
-      getJSON(`https://friends.roblox.com/v1/users/${userId}/friends`),
-      getJSON(`https://friends.roblox.com/v1/users/${userId}/followers/count`),
-      getJSON(`https://friends.roblox.com/v1/users/${userId}/followings/count`),
-    ]);
+    // Friends
+    const friendsRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends`);
+    const friendsData = await friendsRes.json();
 
-    // --- Profil de base (description, verified)
-    const userData = await getJSON(`https://users.roblox.com/v1/users/${userId}`);
-    const description = userData.description || "";
-    const isVerified = !!userData.hasVerifiedBadge; // renvoyé par l’API users
+    // Followers
+    const followersRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`);
+    const followersData = await followersRes.json();
 
-    // --- Items portés
-    const avatarData = await getJSON(`https://avatar.roblox.com/v1/users/${userId}/avatar`);
-    const assetsWorn = (avatarData.assets || []).map(a => ({
-      id: a.id,
-      name: a.name,
-      assetType: a.assetType,
+    // Following
+    const followingRes = await fetch(`https://friends.roblox.com/v1/users/${userId}/followings/count`);
+    const followingData = await followingRes.json();
+
+    // Description
+    const descRes = await fetch(`https://users.roblox.com/v1/users/${userId}`);
+    const descData = await descRes.json();
+    const description = descData.description || "";
+
+    // ITEMS PORTÉS
+    const avatarRes = await fetch(`https://avatar.roblox.com/v1/users/${userId}/avatar`);
+    const avatarData = await avatarRes.json();
+    const assetsWorn = (avatarData.assets || []).map(asset => ({
+      id: asset.id,
+      name: asset.name,
+      assetType: asset.assetType
     }));
 
-    // --- Groupes
-    const rolesData = await getJSON(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
-    const groups = (rolesData.data || []).map(g => ({
+    // GROUPES
+    const groupsRes = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const groupsData = await groupsRes.json();
+    const groups = (groupsData.data || []).map(g => ({
       id: g.group.id,
       name: g.group.name,
       description: g.group.description,
-      role: g.role?.name || "Member",
-      // La miniature sera chargée côté client via rbxthumb://type=GroupIcon&id=<id>
+      emblemUrl: g.group.emblemUrl || "", // si pas d'emblème
+      role: g.role.name
     }));
 
-    // --- Favorites (jeux) : on prend jusqu’à 48 derniers favoris
-    const favResp = await getJSON(`https://games.roblox.com/v2/users/${userId}/favorite/games?limit=48&sortOrder=Desc`);
-    const favoritesRaw = favResp.data || [];
+    // FAVORITES (jeux)
+    // 1) on récupère jusqu'à 48 favoris
+    const favRes = await fetch(`https://games.roblox.com/v2/users/${userId}/favorite/games?limit=48&sortOrder=Desc`);
+    const favData = await favRes.json();
+    const favoritesRaw = favData.data || [];
 
-    // On extrait les universeIds pour récupérer les icônes en 1 requête
+    // 2) récupérer les miniatures des jeux en une ou plusieurs requêtes
     const universeIds = favoritesRaw.map(g => g.id).filter(Boolean);
     let thumbsByUni = {};
     if (universeIds.length > 0) {
       const chunk = (arr, n) => arr.length ? [arr.slice(0, n), ...chunk(arr.slice(n), n)] : [];
-      const chunks = chunk(universeIds, 25); // l’API thumbnails accepte ~25 ids max par call
+      const chunks = chunk(universeIds, 25); // l’API accepte ~25 ids par appel
       const allThumbs = [];
       for (const ids of chunks) {
         const q = ids.join(',');
-        const t = await getJSON(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${q}&size=150x150&format=Png&isCircular=false`);
-        allThumbs.push(...(t.data || []));
+        const tRes = await fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${q}&size=150x150&format=Png&isCircular=false`);
+        const tData = await tRes.json();
+        allThumbs.push(...(tData.data || []));
       }
       thumbsByUni = allThumbs.reduce((acc, t) => {
         if (t && t.targetId) acc[t.targetId] = t.imageUrl;
@@ -73,23 +76,22 @@ app.get('/profile/:userid', async (req, res) => {
       creatorName: g.creator?.name || null,
       playing: g.playing || null,
       visits: g.visits || null,
-      thumbnail: thumbsByUni[g.id] || "", // image pour l’UI
+      thumbnail: thumbsByUni[g.id] || ""
     }));
 
     res.json({
       userId: Number(userId),
-      verified: isVerified,
       friends: friendsData.data || [],
       followers: followersData.count || 0,
       following: followingData.count || 0,
-      description,
-      assetsWorn,
-      groups,
-      favorites,
+      description: description,
+      assetsWorn: assetsWorn,
+      groups: groups,
+      favorites: favorites
     });
 
   } catch (err) {
-    console.error('API error:', err.message);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch Roblox data." });
   }
 });
@@ -97,4 +99,5 @@ app.get('/profile/:userid', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Serveur profil Roblox lancé sur port ${PORT}`);
 });
+
 
